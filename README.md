@@ -15,7 +15,7 @@
 ## Commands
 
 ```bash
-python3 fd_odds.py board nfl [--today]     # ML / spread / total for every game -> odds/nfl_board_<ts>.csv
+python3 fd_odds.py board nfl [--today] [--upcoming]  # ML / spread / total; --upcoming skips games in progress -> odds/nfl_board_<ts>.csv
 python3 fd_odds.py props nfl "chiefs"      # player props for one game -> odds/nfl_props_<away>_<home>_<ts>.csv
 python3 fd_odds.py alts nba "lakers"       # alternate spreads + totals -> odds/nba_alts_<away>_<home>_<ts>.csv
 python3 fd_odds.py budget                  # requests used / remaining (free call)

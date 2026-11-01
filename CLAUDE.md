@@ -11,7 +11,7 @@ Your job is to run `fd_odds.py`, show him the results and send him the CSV.
 
 ## How to answer odds requests
 1. Map the request to a command:
-   - "board", "lines", "today's games" → `python3 fd_odds.py board <sport> [--today]`
+   - "board", "lines", "today's games" → `python3 fd_odds.py board <sport> [--today] [--upcoming]` (use `--upcoming` for "pregame only" / "games that haven't started"; the `live` column marks in-game lines - say so in the summary)
    - "props", "player props", or a player name → `python3 fd_odds.py props <sport> "<team>" [--player "<name>"]`
      (the game is found by **team** name; if he only names a player, pick that player's team)
    - "alt lines", "alternate spreads/totals" → `python3 fd_odds.py alts <sport> "<team>"`

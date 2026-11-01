@@ -4,7 +4,7 @@
 READ-ONLY: this tool only reads odds. It never places bets.
 
 Commands:
-  python3 fd_odds.py board <sport> [--today]
+  python3 fd_odds.py board <sport> [--today] [--upcoming]
   python3 fd_odds.py props <sport> "<team substring>" [--player "<name substring>"]
   python3 fd_odds.py alts  <sport> "<team substring>"
   python3 fd_odds.py budget
@@ -275,7 +275,8 @@ def find_event(sk, needle):
         others = "; ".join(f"{e['away_team']} @ {e['home_team']} ({ct_str(e['commence_time'])})"
                            for e in hits[1:4])
         print(f"Note: {len(hits)} games match '{needle}'. Using the soonest. Others: {others}")
-    print(f"Game: {ev['away_team']} @ {ev['home_team']}  ({ct_str(ev['commence_time'])})")
+    live = " - IN PROGRESS, these are live in-game lines" if parse_utc(ev["commence_time"]) <= datetime.now(timezone.utc) else ""
+    print(f"Game: {ev['away_team']} @ {ev['home_team']}  ({ct_str(ev['commence_time'])}){live}")
     return ev
 
 
@@ -292,7 +293,7 @@ def event_odds(sk, ev, markets):
 # --------------------------------------------------------------------------- commands
 BOARD_COLS = ["game_id", "commence_time_ct", "away", "home", "away_ml", "home_ml",
               "spread_home", "spread_home_price", "spread_away_price",
-              "total", "over_price", "under_price"]
+              "total", "over_price", "under_price", "live"]
 
 
 def cmd_board(args):
@@ -302,14 +303,19 @@ def cmd_board(args):
     cols = BOARD_COLS + (["draw_ml"] if args.sport.lower() == "epl" else [])
 
     today = now_ct().date()
-    rows, missing = [], []
+    now_utc = datetime.now(timezone.utc)
+    rows, missing, skipped_live = [], [], 0
     for g in sorted(games, key=lambda g: g["commence_time"]):
         start = to_chicago(parse_utc(g["commence_time"]))
         if args.today and start.date() != today:
             continue
+        is_live = parse_utc(g["commence_time"]) <= now_utc
+        if args.upcoming and is_live:
+            skipped_live += 1
+            continue
         home, away = g["home_team"], g["away_team"]
         row = {"game_id": g["id"], "commence_time_ct": start.strftime("%Y-%m-%d %H:%M"),
-               "away": away, "home": home}
+               "away": away, "home": home, "live": "yes" if is_live else "no"}
         book = fanduel(g)
         if not book:
             missing.append(f"{away} @ {home} ({start:%a %H:%M} CT)")
@@ -334,15 +340,19 @@ def cmd_board(args):
                 row["under_price"] = fmt_price(o["price"])
         rows.append(row)
 
+    if skipped_live:
+        print(f"Skipped {skipped_live} game(s) already in progress (--upcoming).")
     if not rows:
         scope = "today (Chicago time)" if args.today else "right now"
-        print(f"No {args.sport.upper()} games listed {scope}.")
+        extra = " that haven't started yet" if args.upcoming else ""
+        print(f"No {args.sport.upper()} games{extra} listed {scope}.")
         return
-    path = os.path.join(OUT_DIR, f"{args.sport.lower()}_board_{stamp()}.csv")
+    tag = ("_today" if args.today else "") + ("_upcoming" if args.upcoming else "")
+    path = os.path.join(OUT_DIR, f"{args.sport.lower()}_board{tag}_{stamp()}.csv")
     print()
-    tcols = ["commence_time_ct", "away", "home", "away_ml", "home_ml", "spread_home",
+    tcols = ["live", "commence_time_ct", "away", "home", "away_ml", "home_ml", "spread_home",
              "spread_home_price", "spread_away_price", "total", "over_price", "under_price"]
-    theads = ["start CT", "away", "home", "a ML", "h ML", "h sprd", "h px", "a px",
+    theads = ["live", "start CT", "away", "home", "a ML", "h ML", "h sprd", "h px", "a px",
               "total", "o px", "u px"]
     if "draw_ml" in cols:
         tcols.append("draw_ml"); theads.append("draw")
@@ -452,6 +462,7 @@ def main(argv=None):
     b = sub.add_parser("board", help="moneyline / spread / total for every game")
     b.add_argument("sport", help=", ".join(SPORTS))
     b.add_argument("--today", action="store_true", help="only games starting today (Chicago)")
+    b.add_argument("--upcoming", action="store_true", help="skip games already in progress")
     b.set_defaults(func=cmd_board)
 
     p = sub.add_parser("props", help="player props for one game")
