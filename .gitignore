@@ -1,0 +1,4 @@
+.odds_api_key
+odds/
+.venv/
+__pycache__/
