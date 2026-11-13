@@ -5,8 +5,8 @@ READ-ONLY: this tool only reads odds. It never places bets.
 
 Commands:
   python3 fd_odds.py board <sport> [--today] [--upcoming]
-  python3 fd_odds.py props <sport> "<team substring>" [--player "<name substring>"]
-  python3 fd_odds.py alts  <sport> "<team substring>"
+  python3 fd_odds.py props <sport> "<team>" [--today] [--player "<name substring>"]
+  python3 fd_odds.py alts  <sport> "<team>" [--today]
   python3 fd_odds.py budget
 """
 
@@ -259,22 +259,73 @@ def ct_str(iso):
     return to_chicago(parse_utc(iso)).strftime("%Y-%m-%d %H:%M CT")
 
 
-def find_event(sk, needle):
-    """Match a game by team-name substring using /events (does not cost quota)."""
+# Words that turn a school name into a *different* school ("Michigan" -> "Michigan St").
+_QUALIFIERS = {"st", "st.", "state", "tech", "a&m", "a&t", "central", "southern", "christian",
+               "(oh)", "(fl)", "(pa)", "(ny)", "-", "international", "baptist"}
+
+
+def _tokens(s):
+    return re.sub(r"[^a-z0-9&().' -]+", " ", s.lower()).split()
+
+
+def _match_tier(query, team):
+    """Lower is better. None = no match.
+    0 exact full name; 1 team starts with the query as whole words ("Kentucky" -> Kentucky
+    Wildcats); 2 same but the next word makes it another school ("Michigan" -> Michigan St
+    Spartans); 3 query appears as whole words elsewhere
+    ("Kentucky" -> Eastern Kentucky Colonels, "Giants" -> New York Giants); 4 plain substring."""
+    q, t = _tokens(query), _tokens(team)
+    if not q:
+        return None
+    if q == t:
+        return 0
+    if t[:len(q)] == q:
+        nxt = t[len(q)] if len(t) > len(q) else ""
+        return 2 if nxt in _QUALIFIERS else 1
+    for i in range(len(t) - len(q) + 1):
+        if t[i:i + len(q)] == q:
+            return 3
+    return 4 if query.lower() in team.lower() else None
+
+
+def find_event(sk, needle, today_only=False):
+    """Pick one game by team name using /events (costs no quota).
+    Prefers exact / whole-name matches; if the best match is still more than one team,
+    lists them all and stops before any paid request is made."""
     events, _ = api_get(f"/v4/sports/{sk}/events", {})
-    n = needle.lower()
-    hits = [e for e in events if n in e["home_team"].lower() or n in e["away_team"].lower()]
-    if not hits:
+    if today_only:
+        today = now_ct().date()
+        events = [e for e in events if to_chicago(parse_utc(e["commence_time"])).date() == today]
+    scored = []  # (tier, team, event)
+    for e in events:
+        tiers = [(_match_tier(needle, t), t) for t in (e["home_team"], e["away_team"])]
+        tiers = [(tier, t) for tier, t in tiers if tier is not None]
+        if tiers:
+            tier, team = min(tiers)
+            scored.append((tier, team, e))
+    if not scored:
         teams = sorted({t for e in events for t in (e["home_team"], e["away_team"])})
-        raise OddsError(f"No upcoming game matches '{needle}'. "
+        scope = " today (Chicago time)" if today_only else ""
+        raise OddsError(f"No game{scope} matches '{needle}'. "
                         f"{len(events)} games listed; teams include: {', '.join(teams[:30])}"
                         + (" ..." if len(teams) > 30 else ""))
-    hits.sort(key=lambda e: e["commence_time"])
-    ev = hits[0]
-    if len(hits) > 1:
+    best = min(t for t, _, _ in scored)
+    top = sorted([x for x in scored if x[0] == best], key=lambda x: x[2]["commence_time"])
+    teams = sorted({team for _, team, _ in top})
+    if len(teams) > 1:
+        lines = "\n".join(f"  - {e['away_team']} @ {e['home_team']}  ({ct_str(e['commence_time'])})"
+                          for _, _, e in top)
+        raise OddsError(f"'{needle}' is ambiguous - it matches {len(teams)} teams "
+                        f"({', '.join(teams)}). No requests spent. Use more of the name.\n{lines}")
+    ev = top[0][2]
+    if len(top) > 1:
         others = "; ".join(f"{e['away_team']} @ {e['home_team']} ({ct_str(e['commence_time'])})"
-                           for e in hits[1:4])
-        print(f"Note: {len(hits)} games match '{needle}'. Using the soonest. Others: {others}")
+                           for _, _, e in top[1:4])
+        print(f"Note: {teams[0]} has {len(top)} games listed. Using the soonest. Others: {others}")
+    weaker = [x for x in scored if x[0] > best]
+    if weaker:
+        print(f"Note: '{needle}' also loosely matches: "
+              + ", ".join(sorted({team for _, team, _ in weaker})[:5]) + " (ignored)")
     live = " - IN PROGRESS, these are live in-game lines" if parse_utc(ev["commence_time"]) <= datetime.now(timezone.utc) else ""
     print(f"Game: {ev['away_team']} @ {ev['home_team']}  ({ct_str(ev['commence_time'])}){live}")
     return ev
@@ -372,7 +423,7 @@ def cmd_props(args):
     sk = sport_key(sport)
     if sport not in PROP_MARKETS:
         raise OddsError(f"Props aren't configured for {sport}. Supported: {', '.join(PROP_MARKETS)}")
-    ev = find_event(sk, args.query)
+    ev = find_event(sk, args.query, today_only=args.today)
     book = event_odds(sk, ev, PROP_MARKETS[sport])
     game = f"{ev['away_team']} @ {ev['home_team']}"
     grouped = {}
@@ -407,7 +458,7 @@ ALT_COLS = ["game", "market", "line", "home_or_over_price", "away_or_under_price
 def cmd_alts(args):
     sport = args.sport.lower()
     sk = sport_key(sport)
-    ev = find_event(sk, args.query)
+    ev = find_event(sk, args.query, today_only=args.today)
     book = event_odds(sk, ev, ["alternate_spreads", "alternate_totals"])
     home, away = ev["home_team"], ev["away_team"]
     game = f"{away} @ {home}"
@@ -467,13 +518,15 @@ def main(argv=None):
 
     p = sub.add_parser("props", help="player props for one game")
     p.add_argument("sport")
-    p.add_argument("query", help="team name substring used to find the game")
+    p.add_argument("query", help="team name (whole names win: 'Kentucky' = Kentucky Wildcats)")
     p.add_argument("--player", help="optional: keep only players matching this substring")
+    p.add_argument("--today", action="store_true", help="only consider games starting today (Chicago)")
     p.set_defaults(func=cmd_props)
 
     a = sub.add_parser("alts", help="alternate spreads/totals for one game")
     a.add_argument("sport")
     a.add_argument("query", help="team name substring")
+    a.add_argument("--today", action="store_true", help="only consider games starting today (Chicago)")
     a.set_defaults(func=cmd_alts)
 
     g = sub.add_parser("budget", help="show requests used/remaining (free call)")

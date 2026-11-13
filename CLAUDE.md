@@ -12,9 +12,12 @@ Your job is to run `fd_odds.py`, show him the results and send him the CSV.
 ## How to answer odds requests
 1. Map the request to a command:
    - "board", "lines", "today's games" → `python3 fd_odds.py board <sport> [--today] [--upcoming]` (use `--upcoming` for "pregame only" / "games that haven't started"; the `live` column marks in-game lines - say so in the summary)
-   - "props", "player props", or a player name → `python3 fd_odds.py props <sport> "<team>" [--player "<name>"]`
+   - "props", "player props", or a player name → `python3 fd_odds.py props <sport> "<team>" [--today] [--player "<name>"]`
      (the game is found by **team** name; if he only names a player, pick that player's team)
-   - "alt lines", "alternate spreads/totals" → `python3 fd_odds.py alts <sport> "<team>"`
+   - "alt lines", "alternate spreads/totals" → `python3 fd_odds.py alts <sport> "<team>" [--today]`
+   - Add `--today` to props/alts when he means tonight's game. Team matching prefers whole names
+     ("Kentucky" = Kentucky Wildcats, not Eastern Kentucky). If the tool says a name is ambiguous it has
+     spent no requests: re-run with the fuller name (e.g. "Los Angeles Lakers") and say which you picked.
    - "how many requests left", "budget" → `python3 fd_odds.py budget`
    - Sports: nfl, nba, nhl, ncaaf, ncaab, mlb, epl. Props only for nfl, ncaaf, nba, ncaab, nhl.
 2. Run it. Then reply in this order:

@@ -22,7 +22,10 @@ python3 fd_odds.py budget                  # requests used / remaining (free cal
 ```
 
 Sports: `nfl nba nhl ncaaf ncaab mlb epl`. Props support nfl, ncaaf, nba, ncaab, nhl.
-`props` finds the game by team name. Add `--player "mahomes"` to filter to one player.
+`props` and `alts` find the game by team name, preferring whole names ("Kentucky" = Kentucky Wildcats,
+not Eastern Kentucky). Add `--today` to only consider today's games, and `--player "mahomes"` to filter props
+to one player. If a name matches more than one team (e.g. "Los Angeles"), the tool lists the games and stops
+before spending any requests.
 
 ## Running locally (optional)
 
