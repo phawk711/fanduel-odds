@@ -54,10 +54,12 @@ AGREE_MAX = 0.10      # ours vs torvik disagreement that kills a leg
 PARLAY_MAX_PRICE = -170
 
 ILLINOIS = {
-    "illinois", "northwestern", "depaul", "loyola chicago", "illinois state", "bradley",
+    # exact Torvik spellings (matched after normalization, so "Illinois St." == "Illinois State")
+    "illinois", "northwestern", "depaul", "loyola chicago", "illinois st.", "bradley",
     "southern illinois", "siu edwardsville", "siue", "northern illinois", "illinois chicago",
-    "uic", "chicago state", "eastern illinois", "western illinois", "illinois-chicago",
+    "uic", "chicago st.", "eastern illinois", "western illinois", "illinois-chicago",
 }
+# Northwestern St. (Louisiana) is NOT on this list and must not be caught by it.
 
 # FanDuel / feed spellings -> Torvik spellings (normalized form). Extend as mismatches show up.
 ALIASES = {
@@ -129,6 +131,9 @@ def key(s):
     s = re.sub(r"[^a-z0-9 ]", "", s)
     s = re.sub(r"\bsaint\b", "st", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+ILLINOIS_KEYS = {key(t) for t in ILLINOIS}
 
 
 def phi(x):
@@ -495,7 +500,7 @@ def main():
             print(f"{label[:52]:52s} {'':6s} {'':6s} {'':6s} {'':6s} {'':7s} {'':6s}  SKIP: "
                   f"{'home ' + hhow if h is None else ''}{' / ' if h is None and aw is None else ''}{'away ' + ahow if aw is None else ''}")
             continue
-        if key(h) in ILLINOIS or key(aw) in ILLINOIS or any(k in key(h) or k in key(aw) for k in ("illinois", "northwestern", "depaul", "loyola chicago", "bradley", "chicago")):
+        if key(h) in ILLINOIS_KEYS or key(aw) in ILLINOIS_KEYS:
             print(f"{label[:52]:52s} {'':6s} {'':6s} {'':6s} {'':6s} {'':7s} {'':6s}  SKIP: Illinois school (house rule)")
             continue
 
