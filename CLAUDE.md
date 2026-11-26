@@ -27,6 +27,13 @@ Your job is to run `fd_odds.py`, show him the results and send him the CSV.
    - the `remaining` request count.
 3. Send the CSV the tool wrote with `SendUserFile` (`display: "attach"`) so he can open or share it.
 
+## cbb_check.py (college basketball model check)
+- **Never run `cbb_check.py` in a cloud session.** It downloads Bart Torvik's files from barttorvik.com, and that
+  site's robots.txt blocks Anthropic's agents (`ClaudeBot`, `anthropic-ai`) from the whole site. Paul runs it on
+  his Mac. In a cloud session, only build `games.txt` from `fd_odds.py board ncaab --today` and print it for him.
+- `games.txt` format: `Away Team @ Home Team, awayPrice, homePrice[, N]` (N = neutral site), games not yet
+  started only, FanDuel names exactly.
+
 ## Budget
 - The free tier is 500 requests a month.
 - `board` costs 3 requests. `props` and `alts` cost 1 per market returned. `budget` and the game lookup are free.

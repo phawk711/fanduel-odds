@@ -2,3 +2,5 @@
 odds/
 .venv/
 __pycache__/
+data/
+games.txt
